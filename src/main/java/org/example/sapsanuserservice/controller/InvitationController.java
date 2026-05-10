@@ -7,9 +7,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Collections;
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/users/invite")
 @RequiredArgsConstructor
@@ -20,20 +17,21 @@ public class InvitationController {
 
     @PostMapping("/group/{groupNumber}")
     @PreAuthorize("hasRole('TEACHER')")
-    public ResponseEntity<InvitationService.InvitationResult> inviteGroup(
+    public ResponseEntity<String> inviteGroup(
             @PathVariable String groupNumber,
-            @RequestHeader("X-User-Institute") String institutes,
-            @RequestHeader("X-User-Direction") String directions,
-            @RequestHeader("X-User-Department") String departments
+            HttpServletRequest request
     ) {
-        try {
-            var result = invitationService.inviteGroup(groupNumber, institutes, directions, departments);
-            return ResponseEntity.ok(result);
-        } catch (InvitationService.ApiException ex) {
-            return ResponseEntity.status(ex.status).body(
-                    new InvitationService.InvitationResult(Collections.emptyList(),
-                            List.of(ex.getMessage()))
-            );
-        }
+        String teacherInstitute = request.getHeader("X-User-Institute");
+        String teacherDirection = request.getHeader("X-User-Direction");
+        String teacherDepartment = request.getHeader("X-User-Department");
+
+        invitationService.inviteGroup(
+                groupNumber,
+                teacherInstitute,
+                teacherDirection,
+                teacherDepartment
+        );
+
+        return ResponseEntity.ok("Студенты группы " + groupNumber + " добавлены в систему");
     }
 }
