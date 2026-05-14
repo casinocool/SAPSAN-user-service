@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>SAPSAN System</title>
+    <script src="https://unpkg.com/keycloak-js@25.0.4/dist/keycloak.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f9; margin: 0; padding: 20px; }
+        .card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .hidden { display: none; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+
+        button { padding: 8px 15px; cursor: pointer; border: none; border-radius: 4px; background: #2196F3; color: white; margin: 2px; }
+        button.delete-btn { background: #f44336; }
+        button.import-btn { background: #4CAF50; }
+        button.logout-btn { background: #607d8b; }
+
+        input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 250px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div class="card header">
+        <div>
+            <h1>Система SAPSAN</h1>
+            <p id="status">Авторизация...</p>
+        </div>
+        <button class="logout-btn" onclick="keycloak.logout()">Выйти</button>
+    </div>
+
+    <!-- ПАНЕЛЬ ПРЕПОДАВАТЕЛЯ -->
+    <div id="teacher-panel" class="card hidden">
+        <h2>Панель управления преподавателя</h2>
+        <div style="margin-bottom: 20px;">
+            <input type="text" id="groupInput" placeholder="Номер группы (например, А-06-22)">
+            <button onclick="loadStudents()">Посмотреть студентов</button>
+            <button class="import-btn" onclick="importStudents()">Добавить (Импорт) группу</button>
+        </div>
+
+        <div id="action-status"></div>
+
+        <h3>Список студентов:</h3>
+        <table id="studentsTable">
+            <thead>
+            <tr>
+                <th>Фамилия</th>
+                <th>Имя</th>
+                <th>Email</th>
+                <th>Тип</th>
+                <th>Действие</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr><td colspan="5">Введите группу и нажмите поиск</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ПАНЕЛЬ СТУДЕНТА -->
+    <div id="student-panel" class="card hidden">
+        <h2>Личный кабинет студента</h2>
+        <p>Добро пожаловать в учебный портал SAPSAN!</p>
+        <!-- Сюда можно добавить логику скачивания лекций -->
+    </div>
+</div>
+
+<script>
+    const keycloak = new Keycloak({
+        url: 'https://sapsan.local/',
+        realm: 'sapsan',
+        clientId: 'sapsan-gateway'
+    });
+
+    keycloak.init({
+        onLoad: 'login-required',
+        checkLoginIframe: false
+    }).then(authenticated => {
+        if (authenticated) {
+            setupUI();
+        }
+    }).catch(err => {
+        document.getElementById('status').innerText = "Ошибка входа: " + err;
+    });
+
+    function setupUI() {
+        const roles = keycloak.tokenParsed.realm_access.roles;
+        const username = keycloak.tokenParsed.preferred_username;
+
+        document.getElementById('status').innerText = `Пользователь: ${username} | Роли: ${roles.join(', ')}`;
+
+        // ИСПРАВЛЕННАЯ ЛОГИКА: проверяем наличие ROLE_TEACHER
+        if (roles.includes('TEACHER') || roles.includes('ROLE_TEACHER')) {
+            document.getElementById('teacher-panel').classList.remove('hidden');
+            document.getElementById('student-panel').classList.add('hidden'); // На всякий случай скрываем студента
+        } else {
+            document.getElementById('student-panel').classList.remove('hidden');
+            document.getElementById('teacher-panel').classList.add('hidden'); // На всякий случай скрываем препода
+        }
+    }
+
+    // --- ФУНКЦИИ ПРЕПОДАВАТЕЛЯ ---
+
+    // 1. Просмотр списка студентов
+    async function loadStudents() {
+        const group = document.getElementById('groupInput').value;
+        if (!group) return alert("Введите номер группы");
+
+        try {
+            const response = await fetch(`/api/users/group/${group}`, {
+                headers: { 'Authorization': 'Bearer ' + keycloak.token }
+            });
+
+            if (!response.ok) throw new Error("Ошибка загрузки или нет доступа");
+
+            const students = await response.json();
+            renderTable(students);
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    // 2. Импорт группы (Добавление)
+    async function importStudents() {
+        const group = document.getElementById('groupInput').value;
+        if (!group) return alert("Введите номер группы для импорта");
+
+        document.getElementById('action-status').innerText = "Выполняется импорт...";
+
+        try {
+            const response = await fetch(`/api/users/invite/group/${group}`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + keycloak.token }
+            });
+
+            const result = await response.json();
+            alert(`Импорт завершен! Успешно: ${result.success.length}, Ошибок: ${result.failed.length}`);
+            loadStudents(); // Обновляем таблицу
+        } catch (err) {
+            alert("Ошибка импорта: " + err);
+        } finally {
+            document.getElementById('action-status').innerText = "";
+        }
+    }
+
+    // 3. Удаление студента
+    async function deleteStudent(email) {
+        if (!confirm(`Удалить студента ${email}?`)) return;
+
+        try {
+            const response = await fetch(`/api/users/${email}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + keycloak.token }
+            });
+
+            if (response.ok) {
+                alert("Удалено");
+                loadStudents(); // Перезагрузить список
+            } else {
+                alert("Ошибка удаления");
+            }
+        } catch (err) {
+            alert("Сетевая ошибка");
+        }
+    }
+
+    // Вспомогательная функция для отрисовки таблицы
+    function renderTable(students) {
+        const tbody = document.querySelector('#studentsTable tbody');
+        if (students.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5">В этой группе нет студентов</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = students.map(s => `
+            <tr>
+                <td>${s.lastName || ''}</td>
+                <td>${s.firstName || ''}</td>
+                <td>${s.email}</td>
+                <td>${s.userType}</td>
+                <td>
+                    <button class="delete-btn" onclick="deleteStudent('${s.email}')">Удалить</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+</script>
+</body>
+</html>
