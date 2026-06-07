@@ -4,6 +4,6 @@ public enum UserStatus {
     ACTIVE,      //Учится или работает
     INACTIVE,   //Временно отстранен
     GRADUATED, //Выпускник
-    EXPELLED,  //отчислен(забанен)
+    EXPELLED,  //отчислен
     PENDING_INVITE //временный пароль
 }

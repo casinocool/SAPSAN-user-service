@@ -34,6 +34,7 @@ public class StudentImportService {
 
     private static final String REALM = "sapsan";
     private static final String STUDENT_ROLE = "ROLE_STUDENT";
+    private static final String MAIL_FROM = "noreply@sapsan.local";
 
     private final Keycloak keycloak;
     private final UserRepository userRepository;
@@ -115,6 +116,7 @@ public class StudentImportService {
     @Async
     public void sendEmailAsync(String email, char[] password) {
         SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(MAIL_FROM);
         message.setTo(email);
         message.setSubject("Ваш аккаунт SAPSAN");
         message.setText("Ваш временный пароль: " + new String(password));

@@ -26,14 +26,18 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                //.csrf(AbstractHttpConfigurer::enable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/webjars/**","/index.html").permitAll()
+                        // Статика фронта (раздаётся Spring'ом из resources/static)
+                        .requestMatchers("/", "/index.html", "/favicon.ico",
+                                         "/css/**", "/js/**", "/assets/**").permitAll()
+                        // Swagger
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**",
+                                         "/swagger-ui.html", "/webjars/**").permitAll()
+                        // Debug-эндпоинт
                         .requestMatchers("/users/debug/**").permitAll()
                         .anyRequest().authenticated()
                 )
-                // Настраиваем Resource Server использовать наш конвертер
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                 );
@@ -41,18 +45,16 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // Кастомный конвертер для чтения ролей из Keycloak (realm_access.roles)
+    @SuppressWarnings("unchecked")
     private Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(jwt -> {
             Map<String, Object> realmAccess = jwt.getClaim("realm_access");
-            if (realmAccess == null || realmAccess.get("roles") == null) {
-                return List.of();
-            }
+            if (realmAccess == null || realmAccess.get("roles") == null) return List.of();
 
             Collection<String> roles = (Collection<String>) realmAccess.get("roles");
             return roles.stream()
-                    .map(role -> new SimpleGrantedAuthority(role)) // Добавляем ROLE_
+                    .map(SimpleGrantedAuthority::new)
                     .collect(Collectors.toList());
         });
         return converter;

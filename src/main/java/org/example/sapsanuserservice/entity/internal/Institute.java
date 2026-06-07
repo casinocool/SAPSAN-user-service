@@ -2,7 +2,6 @@ package org.example.sapsanuserservice.entity.internal;
 
 import jakarta.persistence.*;
 import lombok.Data;
-import lombok.Generated;
 
 @Entity
 @Table(name = "institutes")

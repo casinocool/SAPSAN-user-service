@@ -6,19 +6,30 @@
     <script src="https://unpkg.com/keycloak-js@25.0.4/dist/keycloak.min.js"></script>
     <style>
         body { font-family: sans-serif; background: #f4f4f9; margin: 0; padding: 20px; }
-        .card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card { background: white; border-radius: 8px; padding: 20px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
         .hidden { display: none; }
         .header { display: flex; justify-content: space-between; align-items: center; }
 
-        button { padding: 8px 15px; cursor: pointer; border: none; border-radius: 4px; background: #2196F3; color: white; margin: 2px; }
+        button { padding: 8px 15px; cursor: pointer; border: none; border-radius: 4px;
+                 background: #2196F3; color: white; margin: 2px; }
         button.delete-btn { background: #f44336; }
         button.import-btn { background: #4CAF50; }
         button.logout-btn { background: #607d8b; }
+        button.download-btn { background: #009688; }
 
-        input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 250px; }
+        input, select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        input[type="text"] { width: 250px; }
+        select { min-width: 250px; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
         th { background-color: #f8f9fa; }
+
+        .form-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+        .muted { color: #888; }
+        .alert { padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .alert-error   { background: #fdecea; color: #b00020; }
+        .alert-success { background: #e6f4ea; color: #1b5e20; }
     </style>
 </head>
 <body>
@@ -32,10 +43,10 @@
         <button class="logout-btn" onclick="keycloak.logout()">Выйти</button>
     </div>
 
-    <!-- ПАНЕЛЬ ПРЕПОДАВАТЕЛЯ -->
+    <!-- ============ ПАНЕЛЬ ПРЕПОДАВАТЕЛЯ ============ -->
     <div id="teacher-panel" class="card hidden">
-        <h2>Панель управления преподавателя</h2>
-        <div style="margin-bottom: 20px;">
+        <h2>Управление студентами</h2>
+        <div class="form-row">
             <input type="text" id="groupInput" placeholder="Номер группы (например, А-06-22)">
             <button onclick="loadStudents()">Посмотреть студентов</button>
             <button class="import-btn" onclick="importStudents()">Добавить (Импорт) группу</button>
@@ -47,11 +58,7 @@
         <table id="studentsTable">
             <thead>
             <tr>
-                <th>Фамилия</th>
-                <th>Имя</th>
-                <th>Email</th>
-                <th>Тип</th>
-                <th>Действие</th>
+                <th>Фамилия</th><th>Имя</th><th>Email</th><th>Тип</th><th>Действие</th>
             </tr>
             </thead>
             <tbody>
@@ -60,85 +67,129 @@
         </table>
     </div>
 
-    <!-- ПАНЕЛЬ СТУДЕНТА -->
+    <!-- ============ ПАНЕЛЬ СТУДЕНТА ============ -->
     <div id="student-panel" class="card hidden">
         <h2>Личный кабинет студента</h2>
         <p>Добро пожаловать в учебный портал SAPSAN!</p>
-        <!-- Сюда можно добавить логику скачивания лекций -->
+    </div>
+
+    <!-- ============ ЛЕКЦИИ (общая для всех) ============ -->
+    <div id="lectures-card" class="card hidden">
+        <h2>Лекции</h2>
+
+        <!-- Форма загрузки — только для учителя -->
+        <div id="upload-form" class="hidden" style="margin-bottom: 20px; padding: 15px;
+             border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa;">
+            <h3 style="margin-top: 0;">Загрузить лекцию</h3>
+            <div class="form-row">
+                <label>Направление:
+                    <select id="directionSelect">
+                        <option value="">— выберите —</option>
+                    </select>
+                </label>
+            </div>
+            <div class="form-row">
+                <input type="text" id="lectureTitle" placeholder="Название лекции" style="width: 350px;">
+            </div>
+            <div class="form-row">
+                <input type="file" id="lectureFile">
+                <button onclick="uploadLecture()">Загрузить</button>
+            </div>
+            <div id="upload-progress" class="muted" style="margin-top: 5px;"></div>
+        </div>
+
+        <div id="lectures-alert"></div>
+        <div id="download-progress-wrap" class="hidden" style="margin: 10px 0;">
+            <p class="muted" id="download-progress-text">Скачивание...</p>
+            <div class="progress" style="height: 8px; background: #f0f0f3; border-radius: 4px; overflow: hidden;">
+                <div id="download-progress-bar" style="height: 100%; background: #009688; width: 0%; transition: width 0.2s;"></div>
+            </div>
+        </div>
+
+        <table id="lecturesTable">
+            <thead>
+            <tr>
+                <th>Название</th><th>Направление</th><th>Файл</th>
+                <th>Размер</th><th>Преподаватель</th><th>Загружено</th><th></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr><td colspan="7" class="muted">Загрузка...</td></tr>
+            </tbody>
+        </table>
     </div>
 </div>
 
 <script>
+    const API_BASE = '/api';
+
     const keycloak = new Keycloak({
         url: 'https://sapsan.local/',
         realm: 'sapsan',
-        clientId: 'sapsan-gateway'
+        clientId: 'sapsan-frontend'
     });
 
     keycloak.init({
         onLoad: 'login-required',
         checkLoginIframe: false
     }).then(authenticated => {
-        if (authenticated) {
-            setupUI();
-        }
+        if (authenticated) setupUI();
     }).catch(err => {
         document.getElementById('status').innerText = "Ошибка входа: " + err;
     });
 
+    // Авто-refresh токена за 30 секунд до истечения
+    setInterval(() => {
+        if (keycloak.authenticated) keycloak.updateToken(30).catch(() => keycloak.logout());
+    }, 20000);
+
+    function authHeaders(extra = {}) {
+        return { 'Authorization': 'Bearer ' + keycloak.token, ...extra };
+    }
+
     function setupUI() {
         const roles = keycloak.tokenParsed.realm_access.roles;
         const username = keycloak.tokenParsed.preferred_username;
+        document.getElementById('status').innerText =
+            `Пользователь: ${username} | Роли: ${roles.join(', ')}`;
 
-        document.getElementById('status').innerText = `Пользователь: ${username} | Роли: ${roles.join(', ')}`;
+        const isTeacher = roles.includes('TEACHER') || roles.includes('ROLE_TEACHER');
 
-        // ИСПРАВЛЕННАЯ ЛОГИКА: проверяем наличие ROLE_TEACHER
-        if (roles.includes('TEACHER') || roles.includes('ROLE_TEACHER')) {
+        if (isTeacher) {
             document.getElementById('teacher-panel').classList.remove('hidden');
-            document.getElementById('student-panel').classList.add('hidden'); // На всякий случай скрываем студента
+            document.getElementById('upload-form').classList.remove('hidden');
         } else {
             document.getElementById('student-panel').classList.remove('hidden');
-            document.getElementById('teacher-panel').classList.add('hidden'); // На всякий случай скрываем препода
         }
+
+        // Лекции видят все
+        document.getElementById('lectures-card').classList.remove('hidden');
+        loadLectures();
+        if (isTeacher) loadMyDepartments();
     }
 
-    // --- ФУНКЦИИ ПРЕПОДАВАТЕЛЯ ---
+    // ===== УПРАВЛЕНИЕ СТУДЕНТАМИ (как было) =====
 
-    // 1. Просмотр списка студентов
     async function loadStudents() {
         const group = document.getElementById('groupInput').value;
         if (!group) return alert("Введите номер группы");
-
         try {
-            const response = await fetch(`/api/users/group/${group}`, {
-                headers: { 'Authorization': 'Bearer ' + keycloak.token }
-            });
-
-            if (!response.ok) throw new Error("Ошибка загрузки или нет доступа");
-
-            const students = await response.json();
-            renderTable(students);
-        } catch (err) {
-            alert(err.message);
-        }
+            const r = await fetch(`${API_BASE}/users/group/${group}`, { headers: authHeaders() });
+            if (!r.ok) throw new Error("Ошибка загрузки или нет доступа");
+            renderTable(await r.json());
+        } catch (err) { alert(err.message); }
     }
 
-    // 2. Импорт группы (Добавление)
     async function importStudents() {
         const group = document.getElementById('groupInput').value;
         if (!group) return alert("Введите номер группы для импорта");
-
         document.getElementById('action-status').innerText = "Выполняется импорт...";
-
         try {
-            const response = await fetch(`/api/users/invite/group/${group}`, {
-                method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + keycloak.token }
-            });
-
-            const result = await response.json();
+            const r = await fetch(`${API_BASE}/users/invite/group/${group}`,
+                                  { method: 'POST', headers: authHeaders() });
+            const result = await r.json();
             alert(`Импорт завершен! Успешно: ${result.success.length}, Ошибок: ${result.failed.length}`);
-            loadStudents(); // Обновляем таблицу
+            loadStudents();
         } catch (err) {
             alert("Ошибка импорта: " + err);
         } finally {
@@ -146,47 +197,223 @@
         }
     }
 
-    // 3. Удаление студента
     async function deleteStudent(email) {
         if (!confirm(`Удалить студента ${email}?`)) return;
-
         try {
-            const response = await fetch(`/api/users/${email}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': 'Bearer ' + keycloak.token }
-            });
-
-            if (response.ok) {
-                alert("Удалено");
-                loadStudents(); // Перезагрузить список
-            } else {
-                alert("Ошибка удаления");
-            }
-        } catch (err) {
-            alert("Сетевая ошибка");
-        }
+            const r = await fetch(`${API_BASE}/users/${email}`,
+                                  { method: 'DELETE', headers: authHeaders() });
+            if (r.ok) { alert("Удалено"); loadStudents(); } else alert("Ошибка удаления");
+        } catch (err) { alert("Сетевая ошибка"); }
     }
 
-    // Вспомогательная функция для отрисовки таблицы
     function renderTable(students) {
         const tbody = document.querySelector('#studentsTable tbody');
         if (students.length === 0) {
             tbody.innerHTML = '<tr><td colspan="5">В этой группе нет студентов</td></tr>';
             return;
         }
-
         tbody.innerHTML = students.map(s => `
             <tr>
-                <td>${s.lastName || ''}</td>
-                <td>${s.firstName || ''}</td>
-                <td>${s.email}</td>
-                <td>${s.userType}</td>
-                <td>
-                    <button class="delete-btn" onclick="deleteStudent('${s.email}')">Удалить</button>
-                </td>
-            </tr>
-        `).join('');
+                <td>${escapeHtml(s.lastName || '')}</td>
+                <td>${escapeHtml(s.firstName || '')}</td>
+                <td>${escapeHtml(s.email)}</td>
+                <td>${escapeHtml(s.userType)}</td>
+                <td><button class="delete-btn" onclick="deleteStudent('${escapeAttr(s.email)}')">Удалить</button></td>
+            </tr>`).join('');
     }
+
+    // ===== ЛЕКЦИИ =====
+
+    async function loadMyDepartments() {
+        try {
+            const r = await fetch(`${API_BASE}/lectures/my-departments`, { headers: authHeaders() });
+            if (!r.ok) return;
+            const list = await r.json();
+            const sel = document.getElementById('directionSelect');
+            sel.innerHTML = '<option value="">— выберите —</option>'
+                + list.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+        } catch (e) { console.error('Не удалось загрузить кафедры', e); }
+    }
+
+    async function loadLectures() {
+        const tbody = document.querySelector('#lecturesTable tbody');
+        try {
+            const r = await fetch(`${API_BASE}/lectures`, { headers: authHeaders() });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const list = await r.json();
+
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="muted">Пока ни одной лекции нет</td></tr>';
+                return;
+            }
+            const isTeacher = (keycloak.tokenParsed.realm_access.roles || [])
+                .some(r => r === 'TEACHER' || r === 'ROLE_TEACHER');
+
+            tbody.innerHTML = list.map(l => `
+                <tr>
+                    <td>${escapeHtml(l.title)}</td>
+                    <td>${escapeHtml(l.directionName)}</td>
+                    <td>${escapeHtml(l.originalFileName)}</td>
+                    <td>${(l.sizeBytes / 1024 / 1024).toFixed(2)} МБ</td>
+                    <td>${escapeHtml(l.uploaderName)}</td>
+                    <td>${formatDate(l.createdAt)}</td>
+                    <td>
+                        <button class="download-btn" onclick="downloadLecture(${l.id}, '${escapeAttr(l.originalFileName)}')">Скачать</button>
+                        ${isTeacher ? `<button class="delete-btn" onclick="deleteLecture(${l.id})">Удалить</button>` : ''}
+                    </td>
+                </tr>`).join('');
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="7" class="alert alert-error">Ошибка: ${escapeHtml(e.message)}</td></tr>`;
+        }
+    }
+
+    async function uploadLecture() {
+        const directionId = document.getElementById('directionSelect').value;
+        const title = document.getElementById('lectureTitle').value.trim();
+        const fileInput = document.getElementById('lectureFile');
+        const progressEl = document.getElementById('upload-progress');
+
+        if (!directionId) return showLecturesAlert('Выберите направление', 'error');
+        if (!title) return showLecturesAlert('Введите название', 'error');
+        if (!fileInput.files[0]) return showLecturesAlert('Выберите файл', 'error');
+
+        const form = new FormData();
+        form.append('departmentId', directionId);
+        form.append('title', title);
+        form.append('file', fileInput.files[0]);
+
+        // XHR ради прогресса (fetch не даёт upload progress)
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/lectures`);
+        xhr.setRequestHeader('Authorization', 'Bearer ' + keycloak.token);
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                progressEl.textContent = `Загрузка: ${pct}%`;
+            }
+        };
+        xhr.onload = () => {
+            progressEl.textContent = '';
+            if (xhr.status >= 200 && xhr.status < 300) {
+                document.getElementById('lectureTitle').value = '';
+                fileInput.value = '';
+                document.getElementById('directionSelect').value = '';
+                showLecturesAlert('Лекция загружена', 'success');
+                loadLectures();
+            } else {
+                let msg = 'HTTP ' + xhr.status;
+                try { msg = JSON.parse(xhr.responseText).error || msg; } catch {}
+                showLecturesAlert('Ошибка: ' + msg, 'error');
+            }
+        };
+        xhr.onerror = () => {
+            progressEl.textContent = '';
+            showLecturesAlert('Сетевая ошибка', 'error');
+        };
+        xhr.send(form);
+    }
+
+    async function downloadLecture(id, filename) {
+        const wrap = document.getElementById('download-progress-wrap');
+        const bar = document.getElementById('download-progress-bar');
+        const text = document.getElementById('download-progress-text');
+
+        wrap.classList.remove('hidden');
+        bar.style.width = '0%';
+        text.textContent = `Скачивание «${filename}»...`;
+
+        try {
+            const r = await fetch(`${API_BASE}/lectures/${id}/download`, { headers: authHeaders() });
+            if (!r.ok) {
+                let msg = 'HTTP ' + r.status;
+                try { msg = (await r.json()).error || msg; } catch {}
+                wrap.classList.add('hidden');
+                return showLecturesAlert('Ошибка: ' + msg, 'error');
+            }
+
+            // Читаем поток с подсчётом прогресса
+            const total = Number(r.headers.get('Content-Length')) || 0;
+            const reader = r.body.getReader();
+            const chunks = [];
+            let received = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                received += value.length;
+
+                if (total > 0) {
+                    const pct = Math.round((received / total) * 100);
+                    bar.style.width = pct + '%';
+                    text.textContent = `Скачивание: ${pct}% (${formatBytes(received)} из ${formatBytes(total)})`;
+                } else {
+                    // Если бэк не отдал Content-Length — показываем хотя бы байты
+                    text.textContent = `Скачано: ${formatBytes(received)}`;
+                }
+            }
+
+            // Склеиваем чанки в Blob и триггерим сохранение
+            const blob = new Blob(chunks);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            text.textContent = 'Готово';
+            setTimeout(() => wrap.classList.add('hidden'), 1500);
+        } catch (e) {
+            wrap.classList.add('hidden');
+            showLecturesAlert('Ошибка: ' + e.message, 'error');
+        }
+    }
+
+    function formatBytes(b) {
+        if (b < 1024) return b + ' Б';
+        if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' КБ';
+        return (b / 1024 / 1024).toFixed(2) + ' МБ';
+    }
+
+    async function deleteLecture(id) {
+        if (!confirm('Удалить лекцию?')) return;
+        try {
+            const r = await fetch(`${API_BASE}/lectures/${id}`,
+                                  { method: 'DELETE', headers: authHeaders() });
+            if (r.ok) { showLecturesAlert('Лекция удалена', 'success'); loadLectures(); }
+            else {
+                let msg = 'HTTP ' + r.status;
+                try { msg = (await r.json()).error || msg; } catch {}
+                showLecturesAlert('Ошибка: ' + msg, 'error');
+            }
+        } catch (e) { showLecturesAlert('Ошибка: ' + e.message, 'error'); }
+    }
+
+    function showLecturesAlert(text, kind = 'error') {
+        const el = document.getElementById('lectures-alert');
+        el.className = 'alert alert-' + kind;
+        el.textContent = text;
+        setTimeout(() => { el.textContent = ''; el.className = ''; }, 4000);
+    }
+
+    function formatDate(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        const pad = n => String(n).padStart(2, '0');
+        return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    // защита от XSS
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function escapeAttr(s) { return escapeHtml(s).replace(/'/g, '&#39;'); }
 </script>
 </body>
 </html>

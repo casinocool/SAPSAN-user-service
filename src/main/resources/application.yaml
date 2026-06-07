@@ -3,10 +3,17 @@ server:
   servlet:
     context-path: /api
   forward-headers-strategy: framework
+  tomcat:
+    max-swallow-size: 500MB
+    max-http-form-post-size: 500MB
 
 spring:
   application:
     name: user-service
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
 
   datasource:
     url: jdbc:postgresql://localhost:5434/user
@@ -42,6 +49,7 @@ minio:
   endpoint: http://localhost:9000
   access-key: admin
   secret-key: password
+  region: us-east-1
   bucket: lectures
 
 
@@ -60,6 +68,8 @@ springdoc:
 logging:
   level:
     org.flywaydb: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web: INFO
 
 
 

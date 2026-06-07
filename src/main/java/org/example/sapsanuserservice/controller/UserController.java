@@ -30,7 +30,7 @@ public class UserController {
 
     // Удалить конкретного студента
     @DeleteMapping("/{email}")
-    @PreAuthorize("hasRole('TEACHER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ResponseEntity<Void> deleteStudent(
             @PathVariable String email,
             JwtAuthenticationToken auth) {

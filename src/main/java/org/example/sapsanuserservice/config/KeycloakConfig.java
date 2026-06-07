@@ -15,7 +15,7 @@ public class KeycloakConfig {
                 .realm("sapsan")
                 .grantType(OAuth2Constants.CLIENT_CREDENTIALS)
                 .clientId("sapsan-gateway")
-                .clientSecret("SSFvSaOXHaUJYjqNCdoNYULWlEG3CGm5")
+                .clientSecret("SSFvSaOXHaUJYjqNCdoNYULWlEG3CGm5")//должен быть спрятан в гитигноре
                 .build();
     }
 }

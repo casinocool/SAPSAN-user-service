@@ -34,8 +34,6 @@ public class DebugController {
         debugInfo.put("X-User-Institute", claims.get("institute"));
         debugInfo.put("X-User-Direction", claims.get("direction"));
         debugInfo.put("X-User-Department", claims.get("department"));
-
-        // 4. Почта и ФИО для полноты картины
         debugInfo.put("Email", claims.get("email"));
         debugInfo.put("Preferred Username", claims.get("preferred_username"));
 

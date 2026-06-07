@@ -81,7 +81,6 @@ public class InvitationService {
         return Collections.emptyList();
     }
 
-    // Внутренние классы InvitationResult и ApiException оставляем без изменений...
     public static class InvitationResult {
         public final List<String> success;
         public final List<String> failed;
